@@ -1,0 +1,420 @@
+---
+title: "OSR4_SORA_Viz1"
+author: "Claire Della Vedova et Hugo Lepage"
+date: "1 septembre 2017"
+output: html_document
+---
+
+
+```{r  global_options}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE,
+  warning = FALSE)
+```
+
+
+```{r data}
+sora <- read.csv2("data/SORA_GAMMA_MES_DISSOUT_01092017.csv")
+
+```
+
+```{r package}
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(purrr)
+library(knitr)
+library(gridExtra)
+library(scales)
+```
+
+```{r data management}
+
+# conversion de la date en format date
+
+
+sora$Date <- dmy_hm(sora$Date)
+sora$Date <- date(sora$Date) #☻ necessaire pour afficher les mois sur l'axe des x des grpahs
+sora$DateSimple <- floor_date(sora$Date,unit="day")
+sora$Year <- year(sora$Date)
+
+
+
+```
+
+```{r codage etiage}
+
+
+###### Tableau des debits moyens journaliers
+###### 
+sora_days <- sora %>%
+  group_by(DateSimple) %>%
+  summarise(discharge_days=mean(Discharge))
+
+# ajout de l'année
+sora_days$Year <-year(ymd(sora_days$DateSimple))
+
+
+###### Tableau des debit seuil par année
+###### 
+seuil <- sora_days %>%
+  split(.$Year)%>%
+  map(function(df) df$discharge_days[which(dense_rank(df$discharge_days)==10)]) # map permet d'appliquer la fonction pour chaque split
+   
+
+
+
+seuil_df <- data.frame(unlist(seuil)) # passage en data frame
+seuil_df$Year <- as.numeric(rownames(seuil_df)) # ajout de year
+rownames(seuil_df) <- NULL # supression des rowames
+names(seuil_df)[1] <- c("seuil") # renomme la valriable
+
+
+
+##### Remplissage des modalités de la variable RégimeHydro de sora
+###### par list
+
+#on ajoute la colonne seuil à sora
+sora <- full_join(sora, seuil_df, by="Year")
+
+# on complète la variable Régime Hydro
+sora$RegimeHydro <- ifelse(sora$Discharge<=sora$seuil,"low",ifelse(sora$Discharge>=3000, "flood","normal"))
+
+# on ordonne les classes de la variables RegimeHydro
+sora$RegimeHydro <- factor(sora$RegimeHydro, levels=c("low", "normal", "flood"))
+ 
+
+```
+
+
+
+## Visualisation du débit
+
+```{r plot debit}
+library(scales)
+
+ggplot(sora, aes(x=Date,y=Discharge))+
+  geom_point(aes(colour=RegimeHydro), size=1) +
+  scale_y_continuous(limits=c(0, 6000))+
+  scale_x_date(date_breaks="1 month", labels=date_format("%b")) +
+  scale_colour_manual(values=c("green", "blue", "red"))+
+  facet_wrap(~Year, scales="free") +
+  ylab(expression(bold(paste("Débit (",m^{3},".",s^{-1},")")))) +
+  xlab("")+
+  theme(legend.position="right",
+      legend.background = element_rect(colour = "black", size=.2, linetype="solid"),
+      legend.title = element_text(size=12, face="bold"),
+      legend.text = element_text(size = 12),
+      legend.key = element_blank(), 
+      axis.title=element_text(size=16,face="bold"),
+      #axis.text=element_text(size=12), 
+      strip.text=element_text(size=12, face="bold"),
+      axis.ticks = element_blank(),
+      axis.text.x = element_text(size=12, angle =30),
+      plot.title = element_text(size=18)
+      )  
+
+
+  
+  
+  
+
+
+# idem avec boxplot
+ggplot(sora, aes(x=Date,y=Discharge))+
+  geom_point(aes(colour=RegimeHydro), size=1) +
+  geom_boxplot(alpha=0.5, outlier.alpha=0)+ # outlier.alpha=0 permet de ne pas afficher les outliers (ils sot transparents)
+  scale_y_continuous(limits=c(0, 6000))+
+  scale_colour_manual(values=c("green", "blue", "red"))+
+  facet_wrap(~Year, scales="free")+
+  ylab(expression(bold(paste("Débit (",m^{3},".",s^{-1},")")))) +
+  xlab("")+
+  theme(legend.position="right",
+      legend.background = element_rect(colour = "black", size=.2, linetype="solid"),
+      legend.title = element_text(size=12, face="bold"),
+      legend.text = element_text(size = 12),
+      legend.key = element_blank(), 
+      axis.title=element_text(size=16,face="bold"),
+      #axis.text=element_text(size=12), 
+      strip.text=element_text(size=12, face="bold"),
+      axis.ticks = element_blank(),
+      axis.text.x = element_text(size=12, angle =30),
+      plot.title = element_text(size=18))
+
+
+
+```
+
+
+# Visualisation de la charge 
+```{r charge}
+ggplot(sora, aes(x=Date,y=Charge))+
+  geom_point(aes(colour=RegimeHydro), size=1) +
+  scale_y_continuous(limits=c(0, 5000))+
+  scale_colour_manual(values=c("green", "blue", "red"))+
+  facet_wrap(~Year, scales="free")+
+  ylab(expression(bold(paste("Charge" )))) +
+  xlab("")+
+  theme(legend.position="right",
+      legend.background = element_rect(colour = "black", size=.2, linetype="solid"),
+      legend.title = element_text(size=12, face="bold"),
+      legend.text = element_text(size = 12),
+      legend.key = element_blank(), 
+      axis.title=element_text(size=16,face="bold"),
+      #axis.text=element_text(size=12), 
+      strip.text=element_text(size=12, face="bold"),
+      axis.ticks = element_blank(),
+      axis.text.x = element_text(size=12, angle =30),
+      plot.title = element_text(size=18))
+      
+
+
+
+ggplot(sora, aes(x=RegimeHydro,y=Charge))+
+  geom_jitter(aes(colour=RegimeHydro), size=1) +
+  geom_boxplot(aes(fill=RegimeHydro),alpha=0.5, outlier.alpha = 0)+
+  scale_y_continuous()+
+  scale_colour_manual(values=c("green", "blue", "red"))+
+  scale_fill_manual(values=c("green", "blue", "red"))+
+  facet_wrap(~Year, scales="free")+
+  ylab(expression(bold(paste("Charge")))) +
+  xlab("")+
+  theme(legend.position="right",
+      legend.background = element_rect(colour = "black", size=.2, linetype="solid"),
+      legend.title = element_text(size=12, face="bold"),
+      legend.text = element_text(size = 12),
+      legend.key = element_blank(), 
+      axis.title=element_text(size=16,face="bold"),
+      #axis.text=element_text(size=12), 
+      strip.text=element_text(size=12, face="bold"),
+      axis.ticks = element_blank(),
+      axis.text.x = element_text(size=12, angle =30),
+      plot.title = element_text(size=18))
+
+
+
+```
+
+
+# Visualisation débit charge
+```{r debit charge}
+
+
+ggplot(sora, aes(x=Discharge, y=Charge))+
+  geom_point(aes(colour=RegimeHydro)) +
+  geom_smooth()+
+  facet_wrap(~RegimeHydro, scales = "free")+
+  scale_colour_manual(values=c("#00BA38", "#619CFF","#F8766D"))
+
+
+```
+
+## Détermination de l'équation de la droite log10 MES = a + b*log10 Discharge en condition de régime hydrologique normal
+
+Les paramètres de la droite sont estimé par MCO (moindre carrés ordinaire), aprés suppression des outliers de charge (défini classiquement comme étant en dehors de 1.5 IQR)
+
+```{r plot normal}
+
+### création d'un dataframe sora_normal2 sans outlier
+sora_normal <- sora %>%
+  filter(RegimeHydro=="normal")
+
+ind <- which(log10(sora_normal$Charge) %in% boxplot.stats(log10(sora_normal$Charge))$out)#on récupère les indice des outliers (def clssique, valeurs en dehors de 1.5*IQR)
+sora_normal2 <- sora_normal[-ind,] # sora_normal2  = sora_normal ss outlier
+
+## plot des données sans outliers
+gn2<- sora_normal2 %>%
+    ggplot(aes(x=Discharge, y=Charge))+
+      geom_point(colour="#619CFF") +
+      #scale_color_manual(values="blue")+
+      scale_x_log10()+
+      #scale_y_log10()+
+      geom_smooth(colour="black")+ 
+      geom_smooth(method="lm", colour="red")+
+      ggtitle("sans outliers")
+
+# plot des données avec outliers
+gn<- sora_normal %>%
+    ggplot(aes(x=Discharge, y=Charge))+
+      geom_point(colour="#619CFF") +
+      #scale_color_manual(values="blue")+
+      scale_x_log10()+
+      geom_smooth(colour="black")+ 
+      geom_smooth(method="lm", colour="red")+
+     ggtitle("avec outliers")
+
+
+
+# assign common axis to both plots
+gn.common.y <- gn +  scale_y_log10(limits=c(0.1, 4000),breaks=c(1,10,100,1000,4000))
+gn2.common.y <- gn2 +  scale_y_log10(limits=c(0.1, 4000),breaks=c(1,10,100,1000,4000))
+
+# At this point, they have the same axis, but the axis lengths are unequal, so ...
+
+# build the plots 
+gn.common.y <- ggplot_gtable(ggplot_build(gn.common.y))
+gn2.common.y <- ggplot_gtable(ggplot_build(gn2.common.y))
+
+# copy the plot height from p1 to p2
+gn2.common.y$heights <- gn.common.y$heights
+
+grid.arrange(gn.common.y,gn2.common.y,ncol=2)
+
+
+```
+
+
+```{r eq normal}
+
+## equation de la droite
+mod.normal <- lm(log10(Charge)~log10(Discharge), data=sora_normal2)
+summary(mod.normal)
+
+coef_normal <-coefficients(mod.normal)
+```
+
+L'équation de la droite est : MES = `r round(coef_normal[1],2)` +  `r round(coef_normal[2],2)` * Discharge
+
+
+
+## Détermination de l'équation de la droite log10 MES = a + b*log10 Discharge en condition de régime hydrologique d'étiage (low)
+
+Les paramètres de la droite sont estimé par MCO (moindre carrés ordinaire), aprés suppression des outliers de charge (défini classiquement comme étant en dehors de 1.5 IQR)
+
+```{r remove outliers low}
+
+### création d'un dataframe sora_low2 sans outlier
+sora_low <- sora %>%
+  filter(RegimeHydro=="low")
+
+ind_low <- which(log10(sora_low$Charge) %in% boxplot.stats(log10(sora_low$Charge))$out)#on récupère les indice des outliers (def clssique, valeurs en dehors de 1.5*IQR)
+sora_low2 <- sora_low[-ind_low,] # sora_normal2  = sora_normal ss outlier
+
+
+
+
+## plot des données avec outliers
+glow <- sora_low %>%
+  ggplot(aes(x=Discharge, y=Charge))+
+  geom_point(colour="#00BA38") +
+  scale_x_log10()+
+  geom_smooth(colour="black")+ 
+  geom_smooth(method="lm", colour="red")+
+  ggtitle("avec outliers")
+
+
+#plot(glow)
+
+## plot des données sans outliers
+glow2 <- sora_low2 %>%
+  ggplot(aes(x=Discharge, y=Charge))+
+  geom_point(colour="#00BA38") +
+  scale_x_log10()+
+  geom_smooth(colour="black")+ 
+  geom_smooth(method="lm", colour="red")+
+  ggtitle("sans outliers")
+  
+## ensemble
+
+
+
+# assign common axis to both plots
+glow.common.y <- glow + scale_y_log10(limits=c(0.1, 50),breaks=c(0.1,1,10,25,50))
+glow2.common.y <- glow2 + scale_y_log10(limits=c(0.1, 50),breaks=c(0.1,1,10,25,50))
+
+# At this point, they have the same axis, but the axis lengths are unequal, so ...
+
+# build the plots 
+glow.common.y <- ggplot_gtable(ggplot_build(glow.common.y))
+glow2.common.y <- ggplot_gtable(ggplot_build(glow2.common.y))
+
+# copy the plot height from p1 to p2
+glow2.common.y$heights <- glow.common.y$heights
+
+grid.arrange(glow.common.y,glow2.common.y,ncol=2)
+
+
+
+```
+
+
+```{r eq low}
+
+## equation de la droite
+mod.low <- lm(log10(Charge)~log10(Discharge), data=sora_low2)
+summary(mod.low)
+
+coef_low <-coefficients(mod.low)
+
+```
+
+L'équation de la droite est : MES = `r round(coef_low[1],2)` +  `r round(coef_low[2],2)` * Discharge
+
+
+## Codage de la variable période de retour
+
+```{r import_dataRetourCrue}
+
+
+RetourCrue <- read.csv2("data/PeriodeRetourArles.csv")
+```
+
+
+
+```{r QRetour1}
+
+# on calcul le débit correspondant à un retour de cru=1, en prlongeant l'équation de la droite entre
+# les deux première lignes du tableau retour de crue
+
+eq <- lm(RetourCrue$ReturnPeriod[1:2]~RetourCrue$FloodDischarge[1:2])
+Q <- round((1-coef(eq)[1])/coef(eq)[2],0)
+
+
+# on rajoute cette ligne (retour=1 discharge=Q) dans le tableau RetourCrue
+
+myrow <- c(NA, 1, NA, NA,Q)
+RetourCrue[dim(RetourCrue)[1]+1,]<-myrow
+RetourCrue <- arrange(RetourCrue,FloodDischarge)
+```
+
+```{r predict retour}
+
+# fonction permettant de déterminer les valeur de débit du tableau encadrant la valeur debit observé
+search_bound <- function(discharge_obs) {
+  i<-1
+  while (discharge_obs > RetourCrue$FloodDischarge[i]){
+  i<-i+1
+  }
+  z<-RetourCrue[c(i-1,i), c(1:2,5)]
+  return(z)
+}  
+  
+
+# fonction qui prédit la période de retour par interpolation linéaire entre les 2
+predict_return <- function(discharge_obs) 
+{
+    
+    if (discharge_obs < RetourCrue$FloodDischarge[1]) {
+        pred <- "not flood"
+    } else {
+    bound_df <- search_bound(discharge_obs)
+    mod <- lm(ReturnPeriod~FloodDischarge, data=bound_df)
+
+    new <- data.frame(FloodDischarge = discharge_obs)
+    pred<-round(predict(mod,new, se.fit=FALSE ),2)
+    }
+    return(pred)
+
+}
+  
+
+
+# on applique cette fonction à tout le tableau sora
+
+sora$ReturnPeriod <- sora$Discharge %>%
+  map(function(x) predict_return(x))
+
+```
+
+
+```
+
