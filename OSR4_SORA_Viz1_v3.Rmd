@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE,
 
 
 ```{r data}
-sora <- read.csv2("data/SORA_GAMMA_MES_DISSOUT_01092017.csv")
+sora <- read.csv2("data/SORA_GAMMA_MES_DISSOUT_HYDRO_REJET.csv")
 
 ```
 
@@ -33,7 +33,6 @@ library(scales)
 
 
 sora$Date <- dmy_hm(sora$Date)
-sora$Date <- date(sora$Date) #☻ necessaire pour afficher les mois sur l'axe des x des grpahs
 sora$DateSimple <- floor_date(sora$Date,unit="day")
 sora$Year <- year(sora$Date)
 
@@ -90,12 +89,12 @@ sora$RegimeHydro <- factor(sora$RegimeHydro, levels=c("low", "normal", "flood"))
 ## Visualisation du débit
 
 ```{r plot debit}
-library(scales)
+#library(scales)
 
-ggplot(sora, aes(x=Date,y=Discharge))+
+ggplot(sora, aes(x=date(Date),y=Discharge))+
   geom_point(aes(colour=RegimeHydro), size=1) +
   scale_y_continuous(limits=c(0, 6000))+
-  scale_x_date(date_breaks="1 month", labels=date_format("%b")) +
+  scale_x_date(date_breaks="1 month", date_labels="%b") +
   scale_colour_manual(values=c("green", "blue", "red"))+
   facet_wrap(~Year, scales="free") +
   ylab(expression(bold(paste("Débit (",m^{3},".",s^{-1},")")))) +
@@ -120,9 +119,10 @@ ggplot(sora, aes(x=Date,y=Discharge))+
 
 
 # idem avec boxplot
-ggplot(sora, aes(x=Date,y=Discharge))+
+ggplot(sora, aes(x=date(Date),y=Discharge))+
   geom_point(aes(colour=RegimeHydro), size=1) +
   geom_boxplot(alpha=0.5, outlier.alpha=0)+ # outlier.alpha=0 permet de ne pas afficher les outliers (ils sot transparents)
+  scale_x_date(date_breaks="1 month", date_labels="%b") +
   scale_y_continuous(limits=c(0, 6000))+
   scale_colour_manual(values=c("green", "blue", "red"))+
   facet_wrap(~Year, scales="free")+
@@ -147,9 +147,10 @@ ggplot(sora, aes(x=Date,y=Discharge))+
 
 # Visualisation de la charge 
 ```{r charge}
-ggplot(sora, aes(x=Date,y=Charge))+
+ggplot(sora, aes(x=date(Date),y=Charge))+
   geom_point(aes(colour=RegimeHydro), size=1) +
   scale_y_continuous(limits=c(0, 5000))+
+  scale_x_date(date_breaks="1 month", date_labels="%b") +
   scale_colour_manual(values=c("green", "blue", "red"))+
   facet_wrap(~Year, scales="free")+
   ylab(expression(bold(paste("Charge" )))) +
@@ -204,6 +205,10 @@ ggplot(sora, aes(x=Discharge, y=Charge))+
   geom_smooth()+
   facet_wrap(~RegimeHydro, scales = "free")+
   scale_colour_manual(values=c("#00BA38", "#619CFF","#F8766D"))
+
+
+
+#Mettre les 3 regimhydro sur le même graph avec 3 geom_Smooth
 
 
 ```
@@ -394,7 +399,7 @@ predict_return <- function(discharge_obs)
 {
     
     if (discharge_obs < RetourCrue$FloodDischarge[1]) {
-        pred <- "not flood"
+        pred <- NA
     } else {
     bound_df <- search_bound(discharge_obs)
     mod <- lm(ReturnPeriod~FloodDischarge, data=bound_df)
@@ -410,11 +415,26 @@ predict_return <- function(discharge_obs)
 
 # on applique cette fonction à tout le tableau sora
 
-sora$ReturnPeriod <- sora$Discharge %>%
+
+
+a<- sora$Discharge %>%
   map(function(x) predict_return(x))
+
+sora$ReturnPeriod <- unlist(a)
 
 ```
 
+
+```{r}
+
+ggplot(sora, aes(ReturnPeriod))+
+  geom_histogram(na.rm=TRUE, bins=100, binwidth = 0.01)
+
+length(unique(sora$ReturnPeriod))
+
+
+ggplot(sora, aes(ReturnPeriod))+
+  geom_density()
 
 ```
 
