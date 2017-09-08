@@ -352,15 +352,22 @@ coef_low <-coefficients(mod.low)
 
 ```
 
-L'équation de la droite est : MES = `r round(coef_low[1],2)` +  `r round(coef_low[2],2)` * Discharge
+L équation de la droite est : MES = `r round(coef_low[1],2)` +  `r round(coef_low[2],2)` * Discharge
 
 
 ## Codage de la variable période de retour
 
-```{r import_dataRetourCrue}
+```{r import_dataCrue}
 
 
 RetourCrue <- read.csv2("data/PeriodeRetourArles.csv")
+DescriCrue <- read.csv2("data/Description crue.csv")
+
+DescriCrue$Date_debut <- dmy_hm(DescriCrue$Date_debut )
+DescriCrue$Date_fin <- dmy_hm(DescriCrue$Date_fin )
+
+
+
 ```
 
 
@@ -380,6 +387,47 @@ myrow <- c(NA, 1, NA, NA,Q)
 RetourCrue[dim(RetourCrue)[1]+1,]<-myrow
 RetourCrue <- arrange(RetourCrue,FloodDischarge)
 ```
+
+Le débit correspondant à un retour de crue de 1 est `r Q`
+
+
+```{r split sora}
+
+my_split <- function(date1, date2)
+{
+  tmp <- sora %>%
+    filter(Date > date1) %>%
+    filter(Date < date2)
+  
+}
+
+
+data.list<-lapply(data.list, function(x){
+      x["nbED"]<-dim(x)[1]  
+      x["nbSpecies"]<-nlevels(droplevels(x["SpeciesComp"])
+     return(x)
+})
+      
+      
+      lapply(DescriCrue.list, function(x){
+      sora %>%
+          filter(Date > x["Date_debut"])%>%
+          filter(Date < x["Date_fin"])%>%
+          
+        x["n"]<-dim(x)[1]  
+      x["nbSpecies"]<-nlevels(droplevels(x["SpeciesComp"])
+     return(x)
+
+```
+
+
+
+
+
+
+
+
+
 
 ```{r predict retour}
 
@@ -414,13 +462,10 @@ predict_return <- function(discharge_obs)
 
 
 # on applique cette fonction à tout le tableau sora
-
-
-
-a<- sora$Discharge %>%
+tmp<- sora$Discharge %>%
   map(function(x) predict_return(x))
 
-sora$ReturnPeriod <- unlist(a)
+sora$ReturnPeriod <- unlist(tmp) 
 
 ```
 
