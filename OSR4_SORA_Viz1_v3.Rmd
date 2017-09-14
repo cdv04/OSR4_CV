@@ -355,7 +355,7 @@ coef_low <-coefficients(mod.low)
 L équation de la droite est : MES = `r round(coef_low[1],2)` +  `r round(coef_low[2],2)` * Discharge
 
 
-## Codage de la variable période de retour
+## Codage de la variable période de retour du fichier sora
 
 ```{r import_dataCrue}
 
@@ -391,39 +391,37 @@ RetourCrue <- arrange(RetourCrue,FloodDischarge)
 Le débit correspondant à un retour de crue de 1 est `r Q`
 
 
+
+
 ```{r split sora}
 
-my_split <- function(date1, date2)
+# on split sora en fonction des date du fichier DescriCrue
+tmp_ls <- vector("list", nrow(DescriCrue))
+
+for(i in 1:nrow(DescriCrue))
+{ 
+  tmp_ls[[i]] <- sora %>%
+    filter(Date > DescriCrue$Date_debut[i]) %>%
+    filter(Date < DescriCrue$Date_fin[i])
+  
+  }
+
+  
+```
+
+```{r debit max}
+# on clacul le débit max par periode de crue
+
+DescriCrue$DischargeMax <- NA
+
+for ( i in 1 : length(tmp_ls))
 {
-  tmp <- sora %>%
-    filter(Date > date1) %>%
-    filter(Date < date2)
+  Dmax <- max(tmp_ls[[i]]$Discharge)
+  DescriCrue$DischargeMax[i] <- Dmax
   
 }
 
-
-data.list<-lapply(data.list, function(x){
-      x["nbED"]<-dim(x)[1]  
-      x["nbSpecies"]<-nlevels(droplevels(x["SpeciesComp"])
-     return(x)
-})
-      
-      
-      lapply(DescriCrue.list, function(x){
-      sora %>%
-          filter(Date > x["Date_debut"])%>%
-          filter(Date < x["Date_fin"])%>%
-          
-        x["n"]<-dim(x)[1]  
-      x["nbSpecies"]<-nlevels(droplevels(x["SpeciesComp"])
-     return(x)
-
 ```
-
-
-
-
-
 
 
 
@@ -443,16 +441,16 @@ search_bound <- function(discharge_obs) {
   
 
 # fonction qui prédit la période de retour par interpolation linéaire entre les 2
-predict_return <- function(discharge_obs) 
+predict_return <- function(discharge_max) 
 {
     
-    if (discharge_obs < RetourCrue$FloodDischarge[1]) {
+    if (discharge_max < RetourCrue$FloodDischarge[1]) {
         pred <- NA
     } else {
-    bound_df <- search_bound(discharge_obs)
+    bound_df <- search_bound(discharge_max)
     mod <- lm(ReturnPeriod~FloodDischarge, data=bound_df)
 
-    new <- data.frame(FloodDischarge = discharge_obs)
+    new <- data.frame(FloodDischarge = discharge_max)
     pred<-round(predict(mod,new, se.fit=FALSE ),2)
     }
     return(pred)
@@ -460,26 +458,69 @@ predict_return <- function(discharge_obs)
 }
   
 
+# on applique cette fonction à tout le tableau DescriCrue
 
-# on applique cette fonction à tout le tableau sora
-tmp<- sora$Discharge %>%
+
+DescriCrue$ReturnPeriod<- DescriCrue$DischargeMax %>%
   map(function(x) predict_return(x))
 
-sora$ReturnPeriod <- unlist(tmp) 
+
+# on assigne la valeur du retour Crue et OrigineCrue à toutes les lignes de sora correspondante (comprises entre les dates de début et de fin)
+
+### Boucle qui dit si la date de sora correspond à une date de crue ou pas
+
+#  initialisation de sora$ReturnPeriod=NA, idem pour OrigineCrue1 et OrigineCrue2
+sora$ReturnPeriod <- NA
+sora$OrigineCrue1_cdv <- NA
+sora$OrigineCrue2_cdv <- NA
+
+# remplissage de la variable ReturnPeriod de sora en fonction de celle de DescriCrue
+# on repère les lignes de sora qui correspondent à la première crue et on remplit 
+#la variable ReturnPeriod des lignes sora avec la valeur correspondant à la première Crue
+# dans Descri Cru. Puis on recommence avec la crue n°2, etc..
+for ( j in 1 : nrow(DescriCrue))
+{
+  deb <- DescriCrue$Date_debut[j]
+  fin <- DescriCrue$Date_fin [j]
+
+  
+  ind <- which(sora$Date > deb & sora$Date < fin)
+  sora$ReturnPeriod [ind] <- DescriCrue$ReturnPeriod [j]
+  sora$OrigineCrue1_cdv[ind] <-  as.character(DescriCrue$Cat.1 [j])
+  sora$OrigineCrue2_cdv[ind] <-  as.character(DescriCrue$Cat.2 [j])
+
+  
+}
+      
+    
+sora$ReturnPeriod <- unlist(sora$ReturnPeriod)
+
 
 ```
 
+## Calcul des charges manquantes en régime hydrologique normal
+```{r Charges manquante normale}
+rm(ind)
 
-```{r}
+ind <- which(sora$RegimeHydro=="normal" & is.na(sora$Charge))
 
-ggplot(sora, aes(ReturnPeriod))+
-  geom_histogram(na.rm=TRUE, bins=100, binwidth = 0.01)
+sora$Charge[ind] <- coef_normal[1] + coef_normal[2] * sora$Discharge
 
-length(unique(sora$ReturnPeriod))
+```
+
+```{r Charges manquante low}
+
+rm(ind)
+ind <- which(sora$RegimeHydro=="low" & is.na(sora$Charge))
+
+sora$Charge[ind] <- coef_low[1] + coef_low[2] * sora$Discharge
+
+```
+
+```{r export sora}
+write.csv2(sora, "sora_cdv.csv")
 
 
-ggplot(sora, aes(ReturnPeriod))+
-  geom_density()
 
 ```
 
