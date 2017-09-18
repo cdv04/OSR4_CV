@@ -504,7 +504,7 @@ rm(ind)
 
 ind <- which(sora$RegimeHydro=="normal" & is.na(sora$Charge))
 
-sora$Charge[ind] <- coef_normal[1] + coef_normal[2] * sora$Discharge
+sora$Charge[ind] <- 10^(coef_normal[1] + coef_normal[2] * log10(sora$Discharge[ind]))
 
 ```
 
@@ -513,7 +513,7 @@ sora$Charge[ind] <- coef_normal[1] + coef_normal[2] * sora$Discharge
 rm(ind)
 ind <- which(sora$RegimeHydro=="low" & is.na(sora$Charge))
 
-sora$Charge[ind] <- coef_low[1] + coef_low[2] * sora$Discharge
+sora$Charge[ind] <- 10^(coef_low[1] + coef_low[2] * log10(sora$Discharge[ind]))
 
 ```
 
@@ -524,3 +524,24 @@ write.csv2(sora, "sora_cdv.csv")
 
 ```
 
+
+## Categorisation des periodes de retour 
+
+```{r categorisation}
+
+sora$ReturnPeriod_C <- cut(sora$ReturnPeriod, breaks=c(0,1, 1.25,1.5,1.75,2,2.25,2.5 ), include.lowest=TRUE)
+
+
+
+ggplot(sora, aes(x=Charge, y=Discharge, colour=OrigineCrue1_cdv, shape=ReturnPeriod_C ))+
+  geom_point()+
+  scale_x_log10()+
+  facet_wrap(OrigineCrue1_cdv~ReturnPeriod_C)
+
+
+
+```
+
+
+
+## Visualisation
