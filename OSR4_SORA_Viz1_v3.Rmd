@@ -31,13 +31,12 @@ library(scales)
 
 # conversion de la date en format date
 
-
 sora$Date <- dmy_hm(sora$Date)
 sora$DateSimple <- floor_date(sora$Date,unit="day")
 sora$Year <- year(sora$Date)
 
-
-
+# Conversion de la variabe CodeCharge en character (utile pour faire les code m_b par la suite)
+sora$CodeCharge <- as.character(sora$CodeCharge )
 ```
 
 ```{r codage etiage}
@@ -65,8 +64,8 @@ seuil <- sora_days %>%
 seuil_df <- data.frame(unlist(seuil)) # passage en data frame
 seuil_df$Year <- as.numeric(rownames(seuil_df)) # ajout de year
 rownames(seuil_df) <- NULL # supression des rowames
-names(seuil_df)[1] <- c("seuil") # renomme la valriable
-
+names(seuil_df)[1] <- c("seuil_etiage") # renomme la valriable
+seuil_df$seuil_etiage<-round(seuil_df$seuil_etiage,2) # arrondi a 2 chiffres aprés la virgule
 
 
 ##### Remplissage des modalités de la variable RégimeHydro de sora
@@ -76,7 +75,7 @@ names(seuil_df)[1] <- c("seuil") # renomme la valriable
 sora <- full_join(sora, seuil_df, by="Year")
 
 # on complète la variable Régime Hydro
-sora$RegimeHydro <- ifelse(sora$Discharge<=sora$seuil,"low",ifelse(sora$Discharge>=3000, "flood","normal"))
+sora$RegimeHydro <- ifelse(sora$Discharge<=sora$seuil_etiage,"low",ifelse(sora$Discharge>=3000, "flood","normal"))
 
 # on ordonne les classes de la variables RegimeHydro
 sora$RegimeHydro <- factor(sora$RegimeHydro, levels=c("low", "normal", "flood"))
@@ -401,8 +400,8 @@ tmp_ls <- vector("list", nrow(DescriCrue))
 for(i in 1:nrow(DescriCrue))
 { 
   tmp_ls[[i]] <- sora %>%
-    filter(Date > DescriCrue$Date_debut[i]) %>%
-    filter(Date < DescriCrue$Date_fin[i])
+    filter(Date >= DescriCrue$Date_debut[i]) %>%
+    filter(Date <= DescriCrue$Date_fin[i])
   
   }
 
@@ -484,7 +483,7 @@ for ( j in 1 : nrow(DescriCrue))
   fin <- DescriCrue$Date_fin [j]
 
   
-  ind <- which(sora$Date > deb & sora$Date < fin)
+  ind <- which(sora$Date >= deb & sora$Date <= fin)
   sora$ReturnPeriod [ind] <- DescriCrue$ReturnPeriod [j]
   sora$OrigineCrue1_cdv[ind] <-  as.character(DescriCrue$Cat.1 [j])
   sora$OrigineCrue2_cdv[ind] <-  as.character(DescriCrue$Cat.2 [j])
@@ -504,7 +503,8 @@ rm(ind)
 
 ind <- which(sora$RegimeHydro=="normal" & is.na(sora$Charge))
 
-sora$Charge[ind] <- 10^(coef_normal[1] + coef_normal[2] * log10(sora$Discharge[ind]))
+sora$Charge[ind] <- round(10^(coef_normal[1] + coef_normal[2] * log10(sora$Discharge[ind])),2)
+sora$CodeCharge[ind] <- c("m_b")
 
 ```
 
@@ -513,14 +513,12 @@ sora$Charge[ind] <- 10^(coef_normal[1] + coef_normal[2] * log10(sora$Discharge[i
 rm(ind)
 ind <- which(sora$RegimeHydro=="low" & is.na(sora$Charge))
 
-sora$Charge[ind] <- 10^(coef_low[1] + coef_low[2] * log10(sora$Discharge[ind]))
-
+sora$Charge[ind] <- round(10^(coef_low[1] + coef_low[2] * log10(sora$Discharge[ind])),2)
+sora$CodeCharge[ind] <- c("m_b")
 ```
 
 ```{r export sora}
 write.csv2(sora, "sora_cdv.csv")
-
-
 
 ```
 
