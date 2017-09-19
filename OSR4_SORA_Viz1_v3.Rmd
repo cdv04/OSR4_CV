@@ -25,6 +25,7 @@ library(purrr)
 library(knitr)
 library(gridExtra)
 library(scales)
+library(multcomp) # pour loic
 ```
 
 ```{r data management}
