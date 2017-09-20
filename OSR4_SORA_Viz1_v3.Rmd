@@ -26,6 +26,9 @@ library(knitr)
 library(gridExtra)
 library(scales)
 library(multcomp) # pour loic
+library(drc) # pour Hugo
+
+
 ```
 
 ```{r data management}
