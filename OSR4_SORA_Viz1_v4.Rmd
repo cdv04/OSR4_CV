@@ -25,9 +25,6 @@ library(purrr)
 library(knitr)
 library(gridExtra)
 library(scales)
-library(multcomp) # pour loic
-library(drc) # pour Hugo
-
 
 ```
 
@@ -42,6 +39,10 @@ sora$Year <- year(sora$Date)
 # Conversion de la variabe CodeCharge en character (utile pour faire les code m_b par la suite)
 sora$CodeCharge <- as.character(sora$CodeCharge )
 ```
+
+
+
+## Calcul des seuil d'étiage par année
 
 ```{r codage etiage}
 
@@ -70,6 +71,14 @@ seuil_df$Year <- as.numeric(rownames(seuil_df)) # ajout de year
 rownames(seuil_df) <- NULL # supression des rowames
 names(seuil_df)[1] <- c("seuil_etiage") # renomme la valriable
 seuil_df$seuil_etiage<-round(seuil_df$seuil_etiage,2) # arrondi a 2 chiffres aprés la virgule
+
+```
+
+
+
+## Codage de la variable RegimeHydro pour toutes les lignes du dataset sora
+```{r var RegimeHydro}
+
 
 
 ##### Remplissage des modalités de la variable RégimeHydro de sora
@@ -358,6 +367,72 @@ coef_low <-coefficients(mod.low)
 L équation de la droite est : MES = `r round(coef_low[1],2)` +  `r round(coef_low[2],2)` * Discharge
 
 
+
+
+## Ajout de variables dans le fichier Descri Prel (debit min, max, moy med etc, idem pour charge et Flux MES)
+
+
+```{r addVar DescriPrel}
+
+DescriPrel <- read.csv2("data/Description_Prelevements.csv")
+
+# Formatage des date du fichier DescriPrel
+DescriPrel$Date_debut <- dmy_hm(DescriPrel$Date_debut )
+DescriPrel$Date_fin <- dmy_hm(DescriPrel$Date_fin )
+
+
+# 
+
+# Création d'un list,  chaque élément contient les données de sora corerspondant au date de début et fin de chaque prélevement
+sora_prel <- vector("list", nrow(DescriPrel))
+
+for(i in 1:nrow(DescriPrel))
+{ 
+  sora_prel[[i]] <- sora %>%
+    filter(Date >= DescriPrel$Date_debut[i]) %>%
+    filter(Date <= DescriPrel$Date_fin[i])
+  
+  }
+
+# Recherche pour chaque periode de prelevement, du debit min, max, med, moy Q1, Q3
+
+for ( i in 1 : nrow(DescriPrel)) {
+ 
+  # infos de débit ( variable discharge)
+  DescriPrel$Debit_min[i] <- min(sora_prel[[i]]$Discharge,na.rm=TRUE)
+  DescriPrel$Debit_max[i] <- max(sora_prel[[i]]$Discharge,na.rm=TRUE)
+  DescriPrel$Debit_moy[i] <- mean(sora_prel[[i]]$Discharge,na.rm=TRUE)
+  DescriPrel$Debit_med[i] <- median(sora_prel[[i]]$Discharge,na.rm=TRUE)
+  DescriPrel$Debit_Q1[i] <-  quantile(sora_prel[[i]]$Discharge,na.rm=TRUE,0.25)
+  DescriPrel$Debit_Q3[i] <-  quantile(sora_prel[[i]]$Discharge,na.rm=TRUE,0.75)
+  
+   # infos de Charge (variable Charge)
+  DescriPrel$Charge_min[i] <- min(sora_prel[[i]]$Charge,na.rm=TRUE)
+  DescriPrel$Charge_max[i] <- max(sora_prel[[i]]$Charge,na.rm=TRUE)
+  DescriPrel$Charge_moy[i] <- mean(sora_prel[[i]]$Charge,na.rm=TRUE)
+  DescriPrel$Charge_med[i] <- median(sora_prel[[i]]$Charge,na.rm=TRUE)
+  DescriPrel$Charge_Q1[i] <-  quantile(sora_prel[[i]]$Charge,na.rm=TRUE,0.25)
+  DescriPrel$Charge_Q3[i] <-  quantile(sora_prel[[i]]$Charge,na.rm=TRUE,0.75)
+  
+  # infos de Flux MES ( variable discharge * variable charge )
+  Flux_MES <- sora_prel[[i]]$Discharge * sora_prel[[i]]$Charge 
+  
+  DescriPrel$FluxMES_min[i] <- min(Flux_MES,na.rm=TRUE)
+  DescriPrel$FluxMES_max[i] <- max(Flux_MES,na.rm=TRUE)
+  DescriPrel$FluxMES_moy[i] <- mean(Flux_MES,na.rm=TRUE)
+  DescriPrel$FluxMES_med[i] <- median(Flux_MES,na.rm=TRUE)
+  DescriPrel$FluxMES_Q1[i] <-  quantile(Flux_MES,na.rm=TRUE,0.25)
+  DescriPrel$FluxMES_Q3[i] <-  quantile(Flux_MES,na.rm=TRUE,0.75)
+  
+
+}
+
+
+
+```
+
+
+
 ## Codage de la variable période de retour du fichier sora
 
 ```{r import_dataCrue}
@@ -366,8 +441,12 @@ L équation de la droite est : MES = `r round(coef_low[1],2)` +  `r round(coef_l
 RetourCrue <- read.csv2("data/PeriodeRetourArles.csv")
 DescriCrue <- read.csv2("data/Description crue.csv")
 
+
+
+# Formatage des date du fichier DescriCrue
 DescriCrue$Date_debut <- dmy_hm(DescriCrue$Date_debut )
 DescriCrue$Date_fin <- dmy_hm(DescriCrue$Date_fin )
+
 
 
 
@@ -382,7 +461,7 @@ DescriCrue$Date_fin <- dmy_hm(DescriCrue$Date_fin )
 
 eq <- lm(RetourCrue$ReturnPeriod[1:2]~RetourCrue$FloodDischarge[1:2])
 Q <- round((1-coef(eq)[1])/coef(eq)[2],0)
-
+Q
 
 # on rajoute cette ligne (retour=1 discharge=Q) dans le tableau RetourCrue
 
@@ -413,8 +492,7 @@ for(i in 1:nrow(DescriCrue))
 ```
 
 ```{r debit max}
-# on clacul le débit max par periode de crue
-
+# on clacul le débit max par periode de crue et on ajoute la variable dans DescriCrue
 DescriCrue$DischargeMax <- NA
 
 for ( i in 1 : length(tmp_ls))
@@ -425,8 +503,6 @@ for ( i in 1 : length(tmp_ls))
 }
 
 ```
-
-
 
 
 
@@ -501,6 +577,29 @@ sora$ReturnPeriod <- unlist(sora$ReturnPeriod)
 
 ```
 
+
+## Reporter la periode de retour Crue dans la table DescriPrel
+```{r RetourPeriod ds descriPrel}
+
+DescriPrel$ReturnPeriod <- NA
+
+
+for ( j in 1 : nrow(DescriCrue))
+{
+  deb <- DescriCrue$Date_debut[j]
+  fin <- DescriCrue$Date_fin [j]
+
+  
+  ind <- which(DescriPrel$Date_debut >= deb & DescriPrel$Date_fin <= fin)
+  DescriPrel$ReturnPeriod [ind] <- DescriCrue$ReturnPeriod [j]
+
+}
+
+ DescriPrel$ReturnPeriod <- unlist( DescriPrel$ReturnPeriod)
+
+```
+
+
 ## Calcul des charges manquantes en régime hydrologique normal
 ```{r Charges manquante normale}
 rm(ind)
@@ -521,8 +620,10 @@ sora$Charge[ind] <- round(10^(coef_low[1] + coef_low[2] * log10(sora$Discharge[i
 sora$CodeCharge[ind] <- c("m_b")
 ```
 
-```{r export sora}
+```{r export datasets}
 write.csv2(sora, "sora_cdv.csv")
+write.csv2(DescriPrel, "DescriPrel_cdv.csv")
+
 
 ```
 
