@@ -736,6 +736,31 @@ write.csv2(CasHydro2, "CasHydro2_cdv.csv")
 ```
 
 
+## Supression des lignes du jeu de données DescriPrel_cdv complété pat Hugo en termes de Cs137 et UCs137
+
+Il s'agit de supprimer les lignes correspondant à une suspission  de crue.
+Les suspissions de crue correspondent à Prelevement==Base et OrigineCRue!= non, ainsi que Prelevement=="aucun".
+
+
+
+
+```{r suppression row}
+DescriPrel_hl <- read.csv2("data/DescriPrel_hl.csv")
+
+
+# indice des lignes correpondat à Prelevement==Base et OrigineCRue!= non,
+ind1 <- which(DescriPrel_hl$Prelevement=="Base" & DescriPrel_hl$OrigineCrue1!="non")
+ind2 <- which(DescriPrel_hl$Prelevement=="Aucun")
+
+
+DescriPrel_hl2 <- DescriPrel_hl [-c(ind1,ind2),]
+dim(DescriPrel_hl2)
+write.csv2(DescriPrel_hl2, "DescriPrel_hl2.csv")
+
+
+```
+
+
 
 ## Activités de Césium
 ```{r}
