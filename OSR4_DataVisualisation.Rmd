@@ -1,0 +1,82 @@
+---
+title: "OSR4_Data_Visualisation"
+author: "Claire Della Vedova"
+date: "3 octobre 2017"
+output: html_document
+---
+
+# But 
+Evalution du Cs en fonction des paramètres hydro (Origine, Prelevement, PeriodeRetour)
+Faire des regreoupements et faire des tests
+
+
+```{r package}
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+library(lubridate)
+
+```
+
+
+```{r load}
+
+load(OSR4.RData)
+Csdata <- DescriPrel_hl2
+
+
+Csdata$Date_debut <- dmy_hm(Csdata$Date_debut)
+Csdata$Date_fin <- dmy_hm(Csdata$Date_fin)
+
+ind <- which(Csdata$OrigineCrue1=="Cevenol")
+Csdata$OrigineCrue1[ind] <- "Cévenol"
+Csdata$OrigineCrue1 <- droplevels(Csdata$OrigineCrue1)
+
+Csdata$OrigineCrue1[ind] <- "Cévenol"
+
+
+
+```
+
+
+
+
+
+```{r}
+round(table(Csdata$OrigineCrue1)/nrow(Csdata)*100,2)
+
+
+```
+
+```{r Cs}
+
+Csdata$Date_med <- Csdata$Date_debut + (Csdata$Date_fin - Csdata$Date_debut)/2
+
+ggplot(Csdata, aes(x=Date_med, y=Cs137, colour=Prelevement, shape=OrigineCrue1 ))+
+  geom_point()
+
+
+
+ggplot(Csdata, aes(y=Cs137,x=OrigineCrue2, fill=OrigineCrue1))+
+  geom_boxplot()
+
+
+
+Csdata_G <- gather(Csdata, "parameter", "value", 11:30)
+ggplot(Csdata_G, aes(x=value, y=Cs137))+
+  geom_point()+
+  facet_wrap(~parameter)
+
+```
+
+
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+plot(cars)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
