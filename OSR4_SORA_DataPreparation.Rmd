@@ -33,7 +33,7 @@ library(scales)
 # conversion de la date en format date
 
 sora$Date <- dmy_hm(sora$Date)
-sora$DateSimple <- floor_date(sora$Date,unit="day")
+sora$DateSimple <- ymd(floor_date(sora$Date,unit="day"))
 sora$Year <- year(sora$Date)
 
 # Conversion de la variabe CodeCharge en character (utile pour faire les code m_b par la suite)
@@ -50,11 +50,12 @@ sora$CodeCharge <- as.character(sora$CodeCharge )
 ###### Tableau des debits moyens journaliers
 ###### 
 sora_days <- sora %>%
-  group_by(DateSimple) %>%
-  summarise(discharge_days=mean(Discharge))
+  dplyr::group_by(DateSimple) %>%
+  dplyr::summarise(discharge_days=mean(Discharge))
 
 # ajout de l'année
-sora_days$Year <-year(ymd(sora_days$DateSimple))
+sora_days$Year <- year(ymd(sora_days$DateSimple))
+#sora_days$Year <-year(ymd(sora_days$DateSimple))
 
 
 ###### Tableau des debit seuil par année
@@ -719,7 +720,7 @@ CasHydro$Combinaison <- as.character(CasHydro$Combinaison )
 
 tb_tmp <- data.frame(sora2 %>%
   group_by(Combinaison) %>%
-  summarise (nb_row_sora=n()))
+  dplyr::summarise (nb_row_sora=n()))
 
 
 CasHydro2<- left_join(CasHydro, (tb_tmp), by="Combinaison") 
