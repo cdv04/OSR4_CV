@@ -5,9 +5,19 @@ date: "3 octobre 2017"
 output: html_document
 ---
 
+
+
+```{r  global_options}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE,
+  warning = FALSE, fig.width = 15, fig.height = 12)
+
+```
+
+
 # But 
 Evalution du Cs en fonction des paramètres hydro (Origine, Prelevement, PeriodeRetour)
 Faire des regreoupements et faire des tests
+
 
 
 ```{r package}
@@ -17,60 +27,720 @@ library(tidyr)
 library(ggplot2)
 library(knitr)
 library(lubridate)
+library(Rmisc)
 
 ```
 
 
+
+
+
 ```{r load}
 
-load(OSR4.RData)
+load("OSR4.RData")
 Csdata <- DescriPrel_hl2
 
 
 Csdata$Date_debut <- dmy_hm(Csdata$Date_debut)
 Csdata$Date_fin <- dmy_hm(Csdata$Date_fin)
 
-ind <- which(Csdata$OrigineCrue1=="Cevenol")
-Csdata$OrigineCrue1[ind] <- "Cévenol"
+# remplace Cévenol par Cévenol et supprime le level Cevenol ds Origine Crue1
+
+Csdata$OrigineCrue1[which(Csdata$OrigineCrue1=="Cevenol")] <- "Cévenol"
 Csdata$OrigineCrue1 <- droplevels(Csdata$OrigineCrue1)
 
-Csdata$OrigineCrue1[ind] <- "Cévenol"
 
-
+# idem pour Origine Crue2
+table(Csdata$OrigineCrue2)
+levels(Csdata$OrigineCrue2)[5] <- "Cévenol 3"
+Csdata$OrigineCrue2[which(Csdata$OrigineCrue2=="Cevenol 1")] <- "Cévenol 1"
+Csdata$OrigineCrue2[which(Csdata$OrigineCrue2=="Cevenol 2")] <- "Cévenol 2"
+Csdata$OrigineCrue2 <- droplevels(Csdata$OrigineCrue2)
 
 ```
 
 
-
-
-
-```{r}
+```{r FreqOrigin1}
+# pourcentage de prélevement de chaque origine
 round(table(Csdata$OrigineCrue1)/nrow(Csdata)*100,2)
 
+```
+
+
+```{r FreqOrigin2}
+# pourcentage de prélevement de chaque origine
+round(table(Csdata$OrigineCrue2)/nrow(Csdata)*100,2)
 
 ```
+
 
 ```{r Cs}
 
+# calcul de la date médiane
 Csdata$Date_med <- Csdata$Date_debut + (Csdata$Date_fin - Csdata$Date_debut)/2
 
-ggplot(Csdata, aes(x=Date_med, y=Cs137, colour=Prelevement, shape=OrigineCrue1 ))+
-  geom_point()
-
+ggplot(Csdata, aes(x=Date_med, y=Cs137, colour=Prelevement, shape=OrigineCrue1, group=Prelevement ))+
+  geom_point()+
+  geom_smooth(method="lm")
 
 
 ggplot(Csdata, aes(y=Cs137,x=OrigineCrue2, fill=OrigineCrue1))+
   geom_boxplot()
 
 
+##♣ Trop lourd
+# Csdata_G <- gather(Csdata, "parameter", "value", 11:30)
+# ggplot(Csdata_G, aes(x=value, y=Cs137))+
+#   geom_point()+
+#   facet_wrap(~parameter)
 
-Csdata_G <- gather(Csdata, "parameter", "value", 11:30)
-ggplot(Csdata_G, aes(x=value, y=Cs137))+
-  geom_point()+
-  facet_wrap(~parameter)
+```
+
+
+## Calcul des moyennes et IC
+
+```{r moy IC}
+
+Csdata_SE <- summarySE(Csdata, measurevar = "Cs137", groupvars = "OrigineCrue2")
+
+kable(Csdata_SE )
+
+
+ggplot(Csdata_SE, aes(x=OrigineCrue2,y=Cs137, colour=OrigineCrue2))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci))+
+  ylim(c(0,20))+
+  geom_text(aes(label=N, y=1))+
+  theme(axis.text.x= element_text( angle=45, size=12))+
+  geom_jitter(data=Csdata, aes(x=OrigineCrue2,y=Cs137))
+
+
+
+```
+
+## Comparaison des moyenne de Cs par niveau d'OrigineCrue1 (Cévenol, Généralisé, Med_extensif et Océanique)
+
+### Cévenol
+
+```{r plot Cévenol}
+
+cev <- Csdata %>%
+  filter(OrigineCrue1=="Cévenol")
+
+
+cevSE <- summarySE(cev,measurevar = "Cs137", groupvars = "OrigineCrue2")
+
+ggplot(cevSE, aes(x=OrigineCrue2,y=Cs137, colour=OrigineCrue2))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci), size=2)+
+  ylim(c(0,20))+
+  geom_text(aes(label=N, y=1), size=12)+
+  theme(axis.text.x= element_text(  size=12))+
+  geom_jitter(data=filter(Csdata, OrigineCrue1=="Cévenol"), aes(x=OrigineCrue2,y=Cs137), size=2)
+
+
+
+
+
+```
+
+
+
+```{r test Cévenol,fig.width = 4, fig.height = 4, fig.align="center"}
+cevSE
+
+cev1 <- cev %>%
+  filter (OrigineCrue2=="Cévenol 1")
+
+cev3 <- cev %>%
+  filter (cev$OrigineCrue2=="Cévenol 3")
+
+# test normalité
+qqnorm(cev1$Cs137)
+qqline(cev1$Cs137)
+shapiro.test(cev1$Cs137)
+#=> acceptée
+
+# test normalité
+qqnorm(cev3$Cs137)
+qqline(cev3$Cs137)
+shapiro.test(cev3$Cs137)
+#=> rejettée
+# => on fait un test non paramétrique
+
+
+with(cev, wilcox.test(Cs137~OrigineCrue2))
+
+with(cev, t.test(log10(Cs137)~OrigineCrue2))
+
+
+```
+ Les tests de Wilcoxon et de Student ne rejettent pas l'hypothèse H0 d'égalité des moyennes de Cs137.
+ 
+ 
+ 
+ ### Généralisé
+
+```{r plot Généralisé}
+
+gen <- Csdata %>%
+  filter(OrigineCrue1=="Généralisé")
+
+
+genSE <- summarySE(gen,measurevar = "Cs137", groupvars = "OrigineCrue2")
+genSE
+ggplot(genSE, aes(x=OrigineCrue2,y=Cs137, colour=OrigineCrue2))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci), size=2)+
+  ylim(c(0,80))+
+  geom_text(aes(label=N, y=1), size=12)+
+  theme(axis.text.x= element_text(  size=12))+
+  geom_jitter(data=filter(Csdata, OrigineCrue1=="Généralisé"), aes(x=OrigineCrue2,y=Cs137), size=2)
+
+
+
+```
+
+
+
+```{r test Généralisé,fig.width = 4, fig.height = 4, fig.align="center"}
+genSE
+
+gen1 <- gen %>%
+  filter (OrigineCrue2=="Généralisé 1")
+
+gen3 <- gen %>%
+  filter (gen$OrigineCrue2=="Généralisé 3")
+
+# test normalité
+qqnorm(gen1$Cs137)
+qqline(gen1$Cs137)
+shapiro.test(gen1$Cs137)
+#=> rejettée
+
+# test normalité
+qqnorm(gen3$Cs137)
+qqline(gen3$Cs137)
+shapiro.test(gen3$Cs137)
+#=> acceptée
+# => on fait un test non paramétrique
+
+
+with(gen, wilcox.test(Cs137~OrigineCrue2))
+
+with(gen, t.test(log10(Cs137)~OrigineCrue2))
+
+
+```
+ Les tests de Wilcoxon et de Student rejettent l'hypothèse H0 d'égalité des moyennes de Cs137.
+ 
+ 
+ 
+
+ ### oce_Extensif
+
+```{r plot Med_Extensif}
+
+med <- Csdata %>%
+  filter(OrigineCrue1=="Med_extensif")
+
+
+medSE <- summarySE(med,measurevar = "Cs137", groupvars = "OrigineCrue2")
+medSE
+ggplot(medSE, aes(x=OrigineCrue2,y=Cs137, colour=OrigineCrue2))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci), size=2)+
+  ylim(c(0,20))+
+  geom_text(aes(label=N, y=1), size=12)+
+  theme(axis.text.x= element_text(  size=12))+
+  geom_jitter(data=filter(Csdata, OrigineCrue1=="Med_extensif"), aes(x=OrigineCrue2,y=Cs137), size=2)
+
+
+
+```
+
+
+
+```{r test Med_Extensif,fig.width = 4, fig.height = 4, fig.align="center"}
+medSE
+
+med1 <- med %>%
+  filter (OrigineCrue2=="Med_extensif 1")
+
+med2 <- med %>%
+  filter (med$OrigineCrue2=="Med_extensif 2")
+
+med3 <- med %>%
+  filter (med$OrigineCrue2=="Med_extensif 3")
+
+# test normalité
+qqnorm(med1$Cs137)
+qqline(med1$Cs137)
+shapiro.test(med1$Cs137)
+#=> rejettée
+
+# test normalité
+qqnorm(med2$Cs137)
+qqline(med2$Cs137)
+shapiro.test(med2$Cs137)
+#=> acceptée
+
+
+# test normalité
+qqnorm(med3$Cs137)
+qqline(med3$Cs137)
+shapiro.test(med3$Cs137)
+#=> acceptée
+# => on fait un test non paramétrique
+
+
+with(med, kruskal.test(Cs137~OrigineCrue2))
+
+
+
+```
+Le tests de Kruskal-Wallis ne rejette pas l'hypothèse H0 d'égalité des moyennes de Cs137.
+ 
+ 
+ 
+
+
+### Océanique
+
+```{r plot Océanique}
+
+oce <- Csdata %>%
+  filter(OrigineCrue1=="Océanique")
+
+
+oceSE <- summarySE(oce,measurevar = "Cs137", groupvars = "OrigineCrue2")
+oceSE
+
+ggplot(oceSE, aes(x=OrigineCrue2,y=Cs137, colour=OrigineCrue2))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci), size=2)+
+  ylim(c(0,20))+
+  geom_text(aes(label=N, y=1), size=12)+
+  theme(axis.text.x= element_text(  size=12))+
+  geom_jitter(data=filter(Csdata, OrigineCrue1=="Océanique"), aes(x=OrigineCrue2,y=Cs137), size=2)
+
+
+
+```
+
+
+
+```{r test Océanique,fig.width = 4, fig.height = 4, fig.align="center"}
+oceSE
+
+oce1 <- oce %>%
+  filter (OrigineCrue2=="Océanique 1")
+
+oce2 <- oce %>%
+  filter (oce$OrigineCrue2=="Océanique 2")
+
+oce3 <- oce %>%
+  filter (oce$OrigineCrue2=="Océanique 3")
+
+# test normalité
+qqnorm(oce1$Cs137)
+qqline(oce1$Cs137)
+shapiro.test(oce1$Cs137)
+#=> rejettée
+
+# test normalité
+qqnorm(oce2$Cs137)
+qqline(oce2$Cs137)
+shapiro.test(oce2$Cs137)
+#=> acceptée
+
+
+# test normalité
+qqnorm(oce3$Cs137)
+qqline(oce3$Cs137)
+shapiro.test(oce3$Cs137)
+#=> acceptée
+# => on fait un test non paramétrique
+
+
+oce_bis <- rbind(oce1,oce2,oce3)
+with(oce_bis, kruskal.test(Cs137~OrigineCrue2))
+
+pairwise.wilcox.test(oce_bis$Cs137,oce_bis$OrigineCrue2, p.adj = "holm")
+
+
+```
+Le test de Kruskal-Wallis rejette l'hypothèse H0 d'égalité des moyennes de Cs137.
+Les comparaisons multiples (avec ajustement de la pvalue selon la méthode de Holm ) mettent en évidence une différence de moyennes entre Océanique1 et Océanique 2, ainsi qu'entre Océanique 2 et Océanique 3. En revanche, aucune différence significative n'est mise en évidence entre océanique 1 et océanique 3.
+ 
+ 
+ 
+## Création de la variable OrigineCrue3 = regroupement des levels de la variable OrigineCrue2 
+
+```{r OrigienCrue3}
+
+#on enlève la data Océanique 5 car elle est seule et Hugo n'a pas d'info supp dessus
+Csdata2 <- Csdata %>%
+  filter(OrigineCrue2!= "Océanique 5")
+
+# on supprime le level pour qu'il na'pparaisse plus
+Csdata2$OrigineCrue2 <- droplevels(Csdata2$OrigineCrue2) 
+
+
+#on initilaise la nouvelle variable OrigineCrue3
+Csdata2$OrigineCrue3 <- Csdata2$OrigineCrue2
+
+
+# affiche les level e Origine Crue3 pour faire ensuite des regrouepements
+levels(Csdata2$OrigineCrue3)
+
+levels(Csdata2$OrigineCrue3)[c(1,2)] <- c("Cévenol_1&3")
+levels(Csdata2$OrigineCrue3)[c(4,5,6)] <- c("Med_extensif_1&2&3")
+levels(Csdata2$OrigineCrue3)[c(6,8)] <- c("Océanique_1&3")
+levels(Csdata2$OrigineCrue3)
+
+
+```
+
+
+
+## Visualisation de l'activité en Cs137 en fonction du débit et de la charge pour chaque modalité d'OrigineCrue3
+
+
+
+```{r moy_OrigineCrue3}
+Csdata_SE2 <- summarySE(Csdata2, measurevar = "Cs137", groupvars = "OrigineCrue3")
+
+kable(Csdata_SE2 )
+
+
+ggplot(Csdata_SE2, aes(x=OrigineCrue3,y=Cs137, colour=OrigineCrue3))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci))+
+  ylim(c(0,80))+
+  geom_text(aes(label=N, y=1))+
+  theme(axis.text.x= element_text( angle=45, size=12))+
+  geom_jitter(data=Csdata2, aes(x=OrigineCrue3,y=Cs137))
+
 
 ```
 
 
 
 
+### Plot en fonction du débit
+
+
+
+```{r PlotDebit}
+
+
+# on utilise un fichier temporaitre Csdata_tmp qui n'a pas les 10 dernières lignes des variables Debit_max,  Charge_max,  FluxMES_max car elle sont considérées comme des facteurs puisqu'elles contiennent #NOM? 
+
+
+
+
+# create_plot <- function(varX) {
+#  return(ggplot(Csdata2, aes(y=Cs137,x=varX, colour=OrigineCrue3))+
+#          geom_point(size=2)+
+#          facet_wrap(~OrigineCrue3)+
+#          ggtitle(deparse(substitute(varX)))+
+#           geom_smooth()+
+#          xlab(deparse(substitute(varX))) +
+#          theme(axis.title.x = element_text(size=20),
+#               axis.title.y = element_text(size=20),
+#               plot.title= element_text(size=20)))
+#     
+# }
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_moy, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         #ggtitle("Debit_moy")+
+          geom_smooth()+
+         xlab("Debit_moy")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))
+    
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_med, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         #ggtitle("Debit_med")+
+          geom_smooth()+
+         xlab("Debit_med")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_max ,colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         #ggtitle("Debit_max")+
+          geom_smooth()+
+         xlab("Debit_max")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_min, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         #ggtitle("Debit_min")+
+          geom_smooth()+
+         xlab("Debit_min")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+
+
+
+```
+
+
+### Plot en fonction de la charge
+
+
+```{r PlotCharge}
+
+# on utilise un fichier temporaitre Csdata_tmp qui n'a pas les 10 dernières lignes des variables Charge_max,  Charge_max,  FluxMES_max car elle sont considérées comme des facteurs puisqu'elles contiennent #NOM? 
+
+# echelle x en log
+# create_plot2 <- function(varX) {
+#  return(ggplot(Csdata2, aes(y=Cs137,x=varX, colour=OrigineCrue3))+
+#          geom_point(size=2)+
+#          facet_wrap(~OrigineCrue3)+
+#          ggtitle(deparse(substitute(varX)))+
+#           geom_smooth()+
+#           scale_x_log10()+
+#          xlab(deparse(substitute(varX))) +
+#          theme(axis.title.x = element_text(size=20),
+#               axis.title.y = element_text(size=20),
+#               plot.title= element_text(size=20)))
+#     
+#         }
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Charge_moy, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        scale_x_log10()+
+         #ggtitle("Charge_moy")+
+          geom_smooth()+
+         xlab("Charge_moy")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))
+    
+
+ggplot(Csdata2, aes(y=Cs137,x=Charge_med, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+          scale_x_log10()+
+         #ggtitle("Charge_med")+
+          geom_smooth()+
+         xlab("Charge_med")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+ggplot(Csdata2, aes(y=Cs137,x=Charge_max ,colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3, scales="free")+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         scale_x_log10()+   
+         #ggtitle("Charge_max")+
+          geom_smooth()+
+         xlab("Charge_max")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Charge_min, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        # ggtitle("Charge_min")+
+         scale_x_log10()+
+          geom_smooth()+
+         xlab("Charge_min")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+
+```
+
+
+ 
+ 
+### Plot en fonction du fluxMES
+
+
+```{r PlotFluxMES}
+
+# on utilise un fichier temporaitre Csdata_tmp qui n'a pas les 10 dernières lignes des variables Charge_max,  Charge_max,  FluxMES_max car elle sont considérées comme des facteurs puisqu'elles contiennent #NOM? 
+
+# echelle x en log
+
+
+
+ggplot(Csdata2, aes(y=Cs137,x=FluxMES_moy, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        scale_x_log10()+
+        # ggtitle("FluxMES_moy")+
+          geom_smooth()+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         xlab("FluxMES_moy")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))
+    
+
+ggplot(Csdata2, aes(y=Cs137,x=FluxMES_med, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+          scale_x_log10()+
+         #ggtitle("FluxMES_med")+
+          geom_smooth()+
+         xlab("FluxMES_med")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+ggplot(Csdata2, aes(y=Cs137,x=FluxMES_max, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         scale_x_log10()+   
+         #ggtitle("FluxMES_max")+
+          geom_smooth()+
+         xlab("FluxMES_max")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+ggplot(Csdata2, aes(y=Cs137,x=FluxMES_min, colour=OrigineCrue3))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+         #ggtitle("FluxMES_min")+
+         scale_x_log10()+
+          geom_smooth()+
+         xlab("FluxMES_min")+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+
+```
+ 
+### Plot en fonction du débit et de la charge
+
+```{r}
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_moy, colour=Charge_moy))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        # ggtitle("Charge_min")+
+         scale_x_log10()+
+          geom_smooth()+
+         xlab("Charge_min")+
+          scale_colour_gradient2(high="red", low="blue" , mid="yellow", midpoint=239)+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))        
+
+
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_med, colour=Charge_med))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        # ggtitle("Charge_min")+
+         scale_x_log10()+
+          geom_smooth()+
+         xlab("Charge_min")+
+          scale_colour_gradient2(high="red", low="blue" , mid="yellow", midpoint=206)+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))     
+
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_min, colour=Charge_min))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        # ggtitle("Charge_min")+
+         scale_x_log10()+
+          geom_smooth()+
+         xlab("Charge_min")+
+          scale_colour_gradient2(high="red", low="blue" , mid="yellow", midpoint=236)+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))
+
+
+
+ggplot(Csdata2, aes(y=Cs137,x=Debit_max, colour=Charge_max))+
+         geom_point(size=2)+
+         facet_wrap(~OrigineCrue3)+
+           facet_wrap(~OrigineCrue3, scales="free")+
+
+        # ggtitle("Charge_max")+
+         scale_x_log10()+
+          geom_smooth()+
+         xlab("Charge_max")+
+          scale_colour_gradient2(high="red", low="blue" , mid="yellow", midpoint=236)+
+         theme(axis.title.x = element_text(size=20),
+              axis.title.y = element_text(size=20),
+              plot.title= element_text(size=20))
+
+
+```
+
+
+## Sauvegarde des objets dans .RData
+```{r save}
+
+save.image(file="OSR4.RData")
+
+```
