@@ -25,6 +25,8 @@ library('rpart.plot')
 library('randomForest')
 library('knitr')
 library('AppliedPredictiveModeling')
+library('Rmisc')
+library('gbm')
 
 ```
 
@@ -32,7 +34,7 @@ library('AppliedPredictiveModeling')
 
 ##1. Data
 
-```{r data}
+```{r data, results='hide'}
 
 load("OSR4.RData")
 
@@ -48,7 +50,7 @@ tail(Csdata2,15)
 Les 10 dernières lignes ne comportent pas de données de débit et de charge ==> on les supprime pour la prédiction.
 
 
-```{r data2}
+```{r data2,results='hide'}
 
 # on enlève les 10 premières lignes
 Csdata3<- Csdata2 %>%
@@ -59,7 +61,10 @@ summary(Csdata3)
 ```
 
 
-##2. Visualizations
+##2. Visualizations 
+
+###2.1 Cs137 en fonction des potentielles variables prédictives numériques
+
 ```{r visualization}
 
 ind_predictorsMoy <- c(13,19,25)
@@ -67,12 +72,12 @@ ind_predictorsMin <- c(11,17,23)
 ind_predictorsMax <- c(12,18,24)
 
 
-# transparentTheme(trans = .4)
-# featurePlot(x=mydata2[, ind_predictorsMoy],
-#             y=mydata2$Cs137,
-#             plot="pairs",
-#             col=as.numeric(mydata2$Prelevement),
-#             auto.key = list(columns = 3))
+transparentTheme(trans = .4)
+featurePlot(x=mydata2[, ind_predictorsMoy],
+            y=mydata2$Cs137,
+            plot="pairs",
+            col=as.numeric(mydata2$Prelevement),
+            auto.key = list(columns = 3))
 
 # Les predicteurs Moy avec une transfo log
 transparentTheme(trans = .4)
@@ -102,7 +107,8 @@ featurePlot(x=log10(mydata2[, ind_predictorsMax]),
             shape=22)
 
 
-
+## ==> les predicteurs Moy mais surtout Min semblent $etre meilleurs que les Max
+## ==> Mais comme dans sora on aura pas de bit min, mais un débit horaire, je vais prendre les paramèters moyens
 
 
 ```
@@ -111,11 +117,32 @@ featurePlot(x=log10(mydata2[, ind_predictorsMax]),
 Les predicteurs Moy mais surtout Min semblent $etre meilleurs que les Max
 Mais comme dans le jeu de données sora on aura pas de débit min, mais un débit horaire, je vais prendre les paramèters moyens
 
+
+###2.2 Cs137 en fonction de l'origine de la Crue (variable OrigineCrue3)
+
+```{r plotOrigineCrue3}
+Csdata_SE2 <- summarySE(Csdata2, measurevar = "Cs137", groupvars = "OrigineCrue3")
+
+ggplot(Csdata_SE2, aes(x=OrigineCrue3,y=Cs137, colour=OrigineCrue3))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymax=Cs137-ci, ymin=Cs137+ci))+
+  ylim(c(0,80))+
+  geom_text(aes(label=N, y=1))+
+  theme(axis.text.x= element_text( angle=45, size=12))+
+  geom_jitter(data=Csdata2, aes(x=OrigineCrue3,y=Cs137))
+
+
+```
+
+
+
+
+
 ##3. Etude des correlations ente les variable Debit_moy, Charge_Moy, FluxMES_moy, Prelevement et OrigineCRue3
 
 Pour cela les variables catégorielles Prelevement et OrigineCrue3 sont transformées en dummy variables.
 
-```{r Correlation}
+```{r Correlation1, results='hide'}
 
 ### ici on ne prend pas en compte les variables facteurs, il faut les passer en dummy
 names(Csdata3)
@@ -130,24 +157,26 @@ data_tmp <- cbind(data_tmp, predict(dum, newdata=data_tmp))
 names(data_tmp)
 data_tmp2 <- data_tmp[,-c(1,5)] # on enleve les variable afcteurs qui ont été remplacé par des dummy
 names(data_tmp2)
+```
 
 
+```{r nvz}
 nzv <- nearZeroVar(data_tmp2 , saveMetrics= TRUE)
-nzv
-# sont nvz les modalités peut repérsentées
+kable(nzv)
+```
+
+Les nvz correspondent aux variables qui ont trés peu de variation, ici se sont les modalités peu représentées.
+
+```{r }
 
 data_tmp3 <- data_tmp2[,nzv$nzv==FALSE]
-head(data_tmp3)
-summary(data_tmp3)
+#head(data_tmp3)
+#summary(data_tmp3)
 descrCor <-  cor(data_tmp3 )
 highlyCorDescr <- caret::findCorrelation(descrCor , cutoff = 0.75, exact=TRUE)
 simplyCor <- descrCor[-highlyCorDescr,-highlyCorDescr]
 filteredDescr <- rownames(simplyCor )  
 filteredDescr 
-#=> FluesMES a été supprimé, Prelevement Base et Crue,et OrigineCrue3=non
-# => a priori il faudrait faire la prediction avec DebitMoyen, Cherge, et OrigineCrue (Prelevement étant fortement corrélé à OrigineCrue : Prelevement = Base = OrigineCrue = non)
-
-
 
 ```
 
@@ -163,9 +192,9 @@ A présent on test différent modeles (knn, linéaire, arbre de régression et r
 L'entrainement du modèle se fait sur une partition "training" du jeu de données " , l'estimation de la RMSE se fait sur la partition "testing".
 
 
-##4.Knn
+##4.Algorithme Knn
 
-```{r knn}
+```{r knnn, fig.height=5, fig.width=5}
 
 mydata_knn <- Csdata3[, c("Cs137", "Debit_moy","Charge_moy","OrigineCrue3")]
 # generate dummies
@@ -229,8 +258,9 @@ rdacb.knn.reg.multi(trg[,4:12], val[,4:12], trg[,1], val[,1],1,5)
 
 La plus faible RMSE obtenue = 10.18
 
+### Algorithme Knn avec Charge_moy et Debit_moy log10 transformées
 
-```{r knn_log}
+```{r knn_log, fig.height=5, fig.width=5}
 
 ## idem avec log(Cs137), log(Debit) et log10(Charge)
 # 
@@ -267,7 +297,7 @@ La plus faible RMSE obtenue avec les predicteurs log10 transformés = 9.33
 
 ##5. Linear Model
 
-```{r linear}
+```{r linear,fig.height=5, fig.width=5}
 
 mydata_lm <- Csdata3
 
@@ -278,12 +308,12 @@ t.idx <- createDataPartition(Csdata3$Cs137, p = 0.7,
 list = FALSE)
 
 # building the linear model sans log
-mod1 <- lm(Cs137~Debit_max+Charge_max+OrigineCrue3, data=Csdata3)
+mod1 <- lm(Cs137~Debit_moy+Charge_moy+OrigineCrue3, data=Csdata3)
 mod1
 summary(mod1)
 
 # generate prediction
-pred <- predict(mod1, Csdata3[-t.idx,c("Debit_max","Charge_max","OrigineCrue3")])
+pred <- predict(mod1, Csdata3[-t.idx,c("Debit_moy","Charge_moy","OrigineCrue3")])
 
 # RMSE
 rmse_ln <- sqrt(mean((pred - Csdata3[-t.idx, 9])^2))
@@ -298,16 +328,18 @@ plot(mod1)
 
 La RMSE du modèle linéaire est :`r rmse_ln`
 
-```{r linear_log}
+### En log10 transformant la charge_moy, le debit_moy et le Cs137 (le plots avaient montré une linéarité aprés log10 transformation)
+
+```{r linear_log,fig.height=5, fig.width=5}
 
 #-------------------------------------------------#
 #        idem mais en utilisant des transfo log
 #-------------------------------------------------#
 
 
-mod2 <- lm(log10(Cs137)~log10(Debit_max) + log10(Charge_max) + OrigineCrue3, data=Csdata3)
+mod2 <- lm(log10(Cs137)~log10(Debit_moy) + log10(Charge_moy) + OrigineCrue3, data=Csdata3)
 mod2
-pred2 <- predict(mod2, Csdata3[-t.idx,c("Debit_max","Charge_max","OrigineCrue3")])
+pred2 <- predict(mod2, Csdata3[-t.idx,c("Debit_moy","Charge_moy","OrigineCrue3")])
 pred2_BT <-10^(pred2)
 rmse_ln_log <- sqrt(mean((pred2_BT - Csdata3[-t.idx, 9])^2))
 
@@ -323,11 +355,42 @@ abline(a=0,b=1,  col="red")
 
 La RMSE du modèle linéaire avec transfo log est :`r rmse_ln_log`, contre `r rmse_ln` sans transfo log.
 
+##6. Linear Model with quadratic terms
 
-##6. REgression Tree
+```{r linear3,fig.height=5, fig.width=5}
+
+mydata_lm <- Csdata3
+
+# create partition
+set.seed(1000)
+
+t.idx <- createDataPartition(Csdata3$Cs137, p = 0.7, 
+list = FALSE)
+
+# building the linear model sans log
+mod3 <- lm(Cs137~Debit_moy + I(Debit_moy)^2+ Charge_moy + I(Charge_moy)^2 + OrigineCrue3, data=Csdata3)
+mod3
+summary(mod3)
+
+# generate prediction
+pred_quad <- predict(mod3, Csdata3[-t.idx,c("Debit_moy","Charge_moy","OrigineCrue3")])
+
+# RMSE
+rmse_ln_quad <- sqrt(mean((pred_quad - Csdata3[-t.idx, 9])^2))
+# =>RMSE = 8.83
 
 
-```{r tree}
+# diagnostic plot
+par(mfrow=c(2,2))
+plot(mod3)
+
+```
+
+
+##7. Regression Tree
+
+
+```{r tree,fig.height=5, fig.width=5}
 mydata_tree <-  Csdata3[, c("Cs137", "Debit_moy","Charge_moy","OrigineCrue3")]
 set.seed(1000)
 t.idx <- createDataPartition(mydata_tree$Cs137, p=0.7, list = FALSE)
@@ -336,6 +399,13 @@ bfit1 <- rpart(Cs137~ ., data = mydata_tree[t.idx,])
 bfit1
 prp(bfit1, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
 varlen=8, shadow.col="gray")
+```
+
+#### Prunning 
+
+```{r prunning,fig.height=5, fig.width=5}
+
+
 
 bfit1$cptable
 #0.6101749 +0.1284660 = 0.7386409 ==> on prend CP= 0.10679333  (2ème ligne)
@@ -344,9 +414,11 @@ bfit1$cptable
 plotcp(bfit1)
 
 # prunning
-bfit1pruned <- prune(bfit1, cp= 0.10679333 )
-prp(bfit1pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
-varlen=8, shadow.col="gray")
+# bfit1pruned <- prune(bfit1, cp= 0.10679333 )
+# prp(bfit1pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+# varlen=8, shadow.col="gray")
+
+
 
 bfit2pruned <- prune(bfit1, cp= 0.01 )
 prp(bfit2pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
@@ -354,16 +426,16 @@ varlen=8, shadow.col="gray")
 
 
 # RMSE sur training
-preds.t1 <- predict(bfit1pruned, mydata_tree[t.idx,])
-sqrt(mean((preds.t1-mydata_tree[t.idx,"Cs137"])^2))
+# preds.t1 <- predict(bfit1pruned, mydata_tree[t.idx,])
+# sqrt(mean((preds.t1-mydata_tree[t.idx,"Cs137"])^2))
 
-preds.t2 <- predict(bfit2pruned, mydata_tree[t.idx,])
-sqrt(mean((preds.t2-mydata_tree[t.idx,"Cs137"])^2))
+# preds.t2 <- predict(bfit2pruned, mydata_tree[t.idx,])
+# sqrt(mean((preds.t2-mydata_tree[t.idx,"Cs137"])^2))
 
 
 # RMSE sur testing
-preds.v1 <- predict(bfit1pruned, mydata_tree[-t.idx,])
-sqrt(mean((preds.v1 - mydata_tree[-t.idx,"Cs137"])^2))
+# preds.v1 <- predict(bfit1pruned, mydata_tree[-t.idx,])
+# sqrt(mean((preds.v1 - mydata_tree[-t.idx,"Cs137"])^2))
 
 preds.v2 <- predict(bfit2pruned, mydata_tree[-t.idx,])
 rmse_tree <- sqrt(mean((preds.v2 - mydata_tree[-t.idx,"Cs137"])^2))
@@ -372,11 +444,14 @@ plot(preds.v2, Csdata3[-t.idx, 9])
 abline(a=0,b=1,  col="red")
 # =>RMSE = 7.82
 ```
+
 La RMSE de l'arbre de régression est :`r rmse_tree `
 
 
+### En utilisant cHarge_moy, Debit_moy et Cs137 log10 transformés
 
-```{r tree_log}
+
+```{r tree_log,fig.height=5, fig.width=5}
 
 #-------------------------------------------------#
 #        idem mais en utilisant des transfo log
@@ -393,6 +468,13 @@ bfit3 <- rpart(Cs137_log~Debit_moy_log + Charge_moy_log + OrigineCrue3 , data = 
 bfit3
 prp(bfit3, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
 varlen=8, shadow.col="gray")
+```
+
+#### Prunning
+
+```{r prunning_log,fig.height=5, fig.width=5}
+
+
 
 bfit3$cptable
 #0.4674446 +0.03736148= 0.5048061==> on prend CP= 0.02509866  (4ème ligne)
@@ -402,9 +484,9 @@ bfit3$cptable
 plotcp(bfit3)
 
 # prunning
-bfit3pruned <- prune(bfit3, cp= 0.02509866  )
-prp(bfit3pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
-varlen=8, shadow.col="gray")
+# bfit3pruned <- prune(bfit3, cp= 0.02509866  )
+# prp(bfit3pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+# varlen=8, shadow.col="gray")
 
 bfit4pruned <- prune(bfit3, cp= 0.01143981 )
 prp(bfit4pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
@@ -412,24 +494,23 @@ varlen=8, shadow.col="gray")
 
 
 # RMSE sur training
-preds.t3 <- predict(bfit3pruned, mydata_tree[t.idx,])
-sqrt(mean((10^(preds.t3)-mydata_tree[t.idx,"Cs137"])^2))
+# preds.t3 <- predict(bfit3pruned, mydata_tree[t.idx,])
+# sqrt(mean((10^(preds.t3)-mydata_tree[t.idx,"Cs137"])^2))
 
-preds.t4 <- predict(bfit4pruned, mydata_tree[t.idx,])
-sqrt(mean((10^(preds.t4)-mydata_tree[t.idx,"Cs137"])^2))
+# preds.t4 <- predict(bfit4pruned, mydata_tree[t.idx,])
+# sqrt(mean((10^(preds.t4)-mydata_tree[t.idx,"Cs137"])^2))
 
 
 # RMSE sur testing
-preds.v3 <- predict(bfit3pruned, mydata_tree[-t.idx,])
-sqrt(mean((10^(preds.v3) - mydata_tree[-t.idx,"Cs137"])^2))
+# preds.v3 <- predict(bfit3pruned, mydata_tree[-t.idx,])
+# sqrt(mean((10^(preds.v3) - mydata_tree[-t.idx,"Cs137"])^2))
 # =>RMSE = 8.256226
 
- preds.v4 <- predict(bfit4pruned, mydata_tree[-t.idx,])
+preds.v4 <- predict(bfit4pruned, mydata_tree[-t.idx,])
 rmse_tree_log <-sqrt(mean((10^(preds.v4) - mydata_tree[-t.idx,"Cs137"])^2))
 
 plot(preds.v2, Csdata3[-t.idx, 9])
 abline(a=0,b=1,  col="red")
-
 
 
 
@@ -440,8 +521,8 @@ La RMSE de l'arbre de régression est :`r rmse_tree_log` contre `r rmse_tree` sa
 
 
 
-##7. Random Forest
-```{r rf}
+##8. Random Forest
+```{r rf,fig.height=5, fig.width=5}
 
 mydata_rf <-  Csdata3[, c("Cs137", "Debit_moy","Charge_moy","OrigineCrue3")]
 
@@ -461,12 +542,23 @@ mod_rf1 <- randomForest(x = mydata_rf[t.idx,2:4],
                         keep.forest=TRUE)
 
 mod_rf1 
+```
+
+```{r var impo}
+
+
 
 mod_rf1$importance 
+```
+
+```{r rmse,fig.height=5, fig.width=5}
+
+
+
 
 #RMSE training
-preds.rf1 <-predict( mod_rf1, newdata=mydata_tree[t.idx,])
-sqrt(mean((preds.rf1 - mydata_tree[t.idx,"Cs137"])^2))
+# preds.rf1 <-predict( mod_rf1, newdata=mydata_tree[t.idx,])
+# sqrt(mean((preds.rf1 - mydata_tree[t.idx,"Cs137"])^2))
 
 #RMSE testing
 preds.rf11 <- predict(mod_rf1, mydata_tree[-t.idx,])
@@ -479,6 +571,10 @@ abline(a=0, b=1, col="red")
 ```
 
 La RMSE de la random forest est:`r rmse_rf`
+
+### En utilisant cHarge_moy, Debit_moy et Cs137 log10 transformés
+
+
 
 ```{r rf_log}
 
@@ -500,12 +596,19 @@ mod_rf2 <- randomForest(x = mydata_rf[t.idx,c(4,6,7)],
 
 mod_rf2
 
+```
+
+
+
+```{r rf_log_importance,fig.height=5, fig.width=5}
+
+
 mod_rf2$importance 
 
 
 #RMSE training
-preds.rf2 <-predict( mod_rf2, newdata=mydata_tree[t.idx,])
-sqrt(mean((10^(preds.rf2) - mydata_tree[t.idx,"Cs137"])^2))
+# preds.rf2 <-predict( mod_rf2, newdata=mydata_tree[t.idx,])
+# sqrt(mean((10^(preds.rf2) - mydata_tree[t.idx,"Cs137"])^2))
 
 #RMSE testing
 preds.rf22 <- predict(mod_rf2, mydata_tree[-t.idx,])
@@ -520,14 +623,55 @@ La RMSE de la random forest est:`r rmse_rf_log` contre `r rmse_rf` sans transfo 
 
 
 
+```{r boosting}
+# 
+# library(gbm)
+# set.seed(1000)
+# t.idx <- createDataPartition(mydata_tree$Cs137, p=0.7, list = FALSE)
+# 
+# 
+# 
+# mod_boost <- gbm(Cs137 ∼ Debit_moy + Charge_moy + OrigineCrue3, 
+#                  data=mydata_rf[t.idx,],
+#                  distribution="gaussian",
+#                  n.trees=5000,
+#                  interaction.depth=4,
+#                  shrinkage=0.1)
+# 
+# 
+# summary(mod_boost) 
+# 
+# yhat.boost=predict(mod_boost ,newdata=mydata_rf[-t.idx,],n.trees=5000)
+# rmse_boost <- sqrt(mean((yhat.boost-mydata_rf[-t.idx,"Cs137"])^2))
+# 
+# rmse_boost 
+
+```
+
+
+
+##X. Récapitulatif
+
+```{r res knn, fig.height=5, fig.width=5}
+rdacb.knn.reg.multi(trg[,4:12], val[,4:12], trg[,1], val[,1],1,5)
+
+```
+
+
 ```{r resultat}
 
-algo <- c("linear", "tree", "random_forest")
-rmse <- c(rmse_ln, rmse_tree, rmse_rf)
-rmse_log <- c(rmse_ln_log, rmse_tree_log, rmse_rf_log)
+rmse_ln_quad_log <- NA
+
+algo <- c("linear", "quadratic", "tree", "random_forest")
+rmse <- c(rmse_ln, rmse_tree,rmse_ln_quad, rmse_rf)
+rmse_log <- c(rmse_ln_log, rmse_ln_quad_log,rmse_tree_log, rmse_rf_log)
 res.df <- data.frame(algo, rmse, rmse_log)
 kable(res.df)
 
 ```
 
 Le meilleur modèle est le random forest utilisé sur des données non log10 transformées, autrement dit, dans leur échelle originale.
+
+
+
+

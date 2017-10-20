@@ -794,18 +794,5 @@ ggplot(sora[sora$RegimeHydro=="low",], aes(x=Date, y=Cs137, colour=RegimeHydro, 
 
 
 
-ggplot(sora, aes(x=Charge, y=Discharge, colour=OrigineCrue1_cdv, shape=ReturnPeriod_C ))+
-  geom_point()+
-  scale_x_log10()+
-  facet_wrap(OrigineCrue1_cdv~ReturnPeriod_C)
 
 
-
-
-
-
-```
-
-
-
-## Visualisation
