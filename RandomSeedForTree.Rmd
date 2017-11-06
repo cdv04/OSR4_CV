@@ -1,0 +1,324 @@
+---
+title: "RandomSeedForTree"
+author: "Claire Della Vedova"
+date: "6 novembre 2017"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+Il s'agit d'évaluer l'influence du jeu de données d'entrainement sur l'arbre de régression déterminé pour prédire la concentration en césium 137.
+Les variables prédictives sont : 
+
+* Charge, 
+* débit, 
+* Flux_MES, 
+* Periode de Retour, 
+* OrigineCrue3
+* prelevement 
+
+
+Les variables numériques ne sont ni loguées ni standradisées et les variables catégorielles sont en facteur.
+
+
+```{r  global_options}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE,
+  warning = FALSE, fig.width = 15, fig.height = 12)
+
+```
+
+
+```{r package}
+library('ggplot2')
+library('dplyr')
+library('tidyverse')
+library('caret')
+library('dummies')
+library('FNN')
+library('scales')
+library('rpart')
+library('rpart.plot')
+library('randomForest')
+library('knitr')
+library('AppliedPredictiveModeling')
+library('Rmisc')
+library('gbm')
+
+```
+
+
+
+##1. Data
+
+```{r data, results='hide'}
+
+load("OSR4.RData")
+
+# on travaille avec le jeu de données CsData2 qui ne contient plus l'unique donnée oceanique5 (variable OrigineCrue3)
+ 
+summary(Csdata2)
+dim(Csdata2)
+str(Csdata2)
+tail(Csdata2,15)
+
+```
+
+Les 10 dernières lignes ne comportent pas de données de débit et de charge ==> on les supprime pour la prédiction.
+
+
+```{r data2,results='hide'}
+
+# on enlève les 10 premières lignes
+Csdata3<- Csdata2 %>%
+  filter(Debit_max!="NA")
+
+tail(Csdata3,15)
+summary(Csdata3)
+```
+
+## Tree 1
+
+```{r tree1,fig.height=5, fig.width=5}
+
+mydata <-  Csdata3[, c(9,4,13,19,25,29,31)]
+
+set.seed(1000)
+t.idx <- createDataPartition(mydata$Cs137, p=0.7, list = FALSE)
+
+
+tree1 <- rpart(Cs137~ .,data=mydata[t.idx,])
+tree1
+prp(tree1, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+```
+
+#### Prunning 
+
+```{r prunning1,fig.height=5, fig.width=5}
+
+tree1$cptable
+ind_xerror_min <- which.min(tree1$cptable[,4])
+my_cp <-tree1$cptable[ind_xerror_min,1]
+
+
+tree1_pruned <- prune(tree1, cp= my_cp )
+prp(tree1_pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+
+
+
+# RMSE sur testing
+preds.tree1 <- predict(tree1_pruned, mydata[-t.idx,])
+rmse_tree1 <- sqrt(mean((preds.tree1 - mydata[-t.idx,"Cs137"])^2))
+rmse_tree1
+
+plot(preds.tree1, Csdata3[-t.idx, 9])
+abline(a=0,b=1,  col="red")
+# =>RMSE = 7.51
+```
+
+La RMSE de l'arbre de régression est :`r rmse_tree1 `
+
+```{r tree1_importante}
+tree1_pruned$variable.importance
+barplot(tree1_pruned$variable.importance)
+
+```
+
+
+## Tree 2
+```{r tree2,fig.height=5, fig.width=5}
+
+set.seed(2000)
+t.idx <- createDataPartition(mydata$Cs137, p=0.7, list = FALSE)
+
+
+tree2 <- rpart(Cs137~ .,data=mydata[t.idx,])
+tree2
+prp(tree2, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+```
+
+#### Prunning 
+
+```{r prunning2,fig.height=5, fig.width=5}
+
+tree2$cptable
+ind_xerror_min <- which.min(tree2$cptable[,4])
+my_cp <-tree2$cptable[ind_xerror_min,1]
+
+
+tree2_pruned <- prune(tree2, cp= my_cp )
+prp(tree2_pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+
+
+# RMSE sur testing
+
+preds.tree2 <- predict(tree2_pruned, mydata[-t.idx,])
+rmse_tree2 <- sqrt(mean((preds.tree2 - mydata[-t.idx,"Cs137"])^2))
+rmse_tree2
+
+plot(preds.tree2, Csdata3[-t.idx, 9])
+abline(a=0,b=1,  col="red")
+# =>RMSE = 7.74
+```
+
+La RMSE de l'arbre de régression est :`r rmse_tree2 `
+
+```{r tree2_importante}
+tree2_pruned$variable.importance
+barplot(tree2_pruned$variable.importance)
+
+```
+
+
+
+
+## Tree 3
+```{r tree3,fig.height=5, fig.width=5}
+
+
+set.seed(3000)
+t.idx <- createDataPartition(mydata$Cs137, p=0.7, list = FALSE)
+
+
+tree3 <- rpart(Cs137~ .,data=mydata[t.idx,])
+tree3
+prp(tree3, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+```
+
+#### Prunning 
+
+```{r prunning1,fig.height=5, fig.width=5}
+
+tree3$cptable
+#0.6101749 +0.1284660 = 0.7386409 ==> on prend CP= 0.10679333  (2ème ligne)
+ind_xerror_min <- which.min(tree3$cptable[,4])
+my_cp <-tree3$cptable[ind_xerror_min,1]
+
+
+tree3_pruned <- prune(tree3, cp= my_cp )
+prp(tree3_pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+
+
+
+# RMSE sur testing
+
+
+preds.tree3 <- predict(tree3_pruned, mydata[-t.idx,])
+rmse_tree3 <- sqrt(mean((preds.tree3 - mydata[-t.idx,"Cs137"])^2))
+rmse_tree3
+
+plot(preds.tree3, Csdata3[-t.idx, 9])
+abline(a=0,b=1,  col="red")
+# =>RMSE = 7.67
+```
+
+La RMSE de l'arbre de régression est :`r rmse_tree3 `
+
+```{r tree3_importante}
+tree3_pruned$variable.importance
+barplot(tree3_pruned$variable.importance)
+
+```
+
+
+
+## Avec une fonction
+```{r all}
+
+mydata <-  Csdata3[, c(9,4,13,19,25,29,31)]
+rmse_vec <- vector(length=10)
+importance_ls <- list(length=10)
+
+for (i in 1 : 10)
+{
+  # seed
+  myseed <- i*1000
+  
+  # index of training
+  t.idx <- createDataPartition(mydata$Cs137, p=0.7, list = FALSE)
+
+  # tree
+  tree_tmp <- rpart(Cs137~ .,data=mydata[t.idx,])
+
+  # prunning
+  my_cp <-tree_tmp$cptable[which.min(tree_tmp$cptable[,4]),1]
+  tree_tmp_pruned <- prune(tree_tmp, cp= my_cp )
+  
+  # assign
+  assign(paste0("tree",i),tree_tmp_pruned)
+  
+    
+  # rmse sur testing
+  preds.tree_tmp <- predict(tree_tmp_pruned, mydata[-t.idx,])
+  rmse_tree_tmp <- sqrt(mean((preds.tree_tmp - mydata[-t.idx,"Cs137"])^2))
+  rmse_vec[i] <-rmse_tree_tmp
+
+  
+  # plot  
+  prp(tree_tmp_pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray", main=paste0("tree",i))
+  
+  # importance
+  tree_tmp_pruned$variable.importance
+  barplot(tree1_pruned$variable.importance)
+  
+}
+
+
+```
+
+
+mydata <-  Csdata3[, c(9,4,13,19,25,29,31)]
+
+set.seed(1000)
+t.idx <- createDataPartition(mydata$Cs137, p=0.7, list = FALSE)
+
+
+tree1 <- rpart(Cs137~ .,data=mydata[t.idx,])
+tree1
+prp(tree1, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+```
+
+#### Prunning 
+
+```{r prunning1,fig.height=5, fig.width=5}
+
+tree1$cptable
+ind_xerror_min <- which.min(tree1$cptable[,4])
+my_cp <-tree1$cptable[ind_xerror_min,1]
+
+
+tree1_pruned <- prune(tree1, cp= my_cp )
+prp(tree1_pruned, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray")
+
+
+
+# RMSE sur testing
+preds.tree1 <- predict(tree1_pruned, mydata[-t.idx,])
+rmse_tree1 <- sqrt(mean((preds.tree1 - mydata[-t.idx,"Cs137"])^2))
+rmse_tree1
+
+plot(preds.tree1, Csdata3[-t.idx, 9])
+abline(a=0,b=1,  col="red")
+# =>RMSE = 7.51
+```
+
+La RMSE de l'arbre de régression est :`r rmse_tree1 `
+
+```{r tree1_importante}
+tree1_pruned$variable.importance
+barplot(tree1_pruned$variable.importance)
+
+```
+
+
+
