@@ -107,15 +107,11 @@ featurePlot(x=log10(mydata2[, ind_predictorsMax]),
             shape=22)
 
 
-## ==> les predicteurs Moy mais surtout Min semblent $etre meilleurs que les Max
-## ==> Mais comme dans sora on aura pas de bit min, mais un débit horaire, je vais prendre les paramèters moyens
 
 
 ```
 
 
-Les predicteurs Moy mais surtout Min semblent $etre meilleurs que les Max
-Mais comme dans le jeu de données sora on aura pas de débit min, mais un débit horaire, je vais prendre les paramèters moyens
 
 
 ###2.2 Cs137 en fonction de l'origine de la Crue (variable OrigineCrue3)
@@ -446,6 +442,11 @@ abline(a=0,b=1,  col="red")
 ```
 
 La RMSE de l'arbre de régression est :`r rmse_tree `
+```{r tree_importante}
+bfit2pruned$variable.importance
+barplot(bfit2pruned$variable.importance)
+
+```
 
 
 ### En utilisant cHarge_moy, Debit_moy et Cs137 log10 transformés
@@ -520,6 +521,11 @@ abline(a=0,b=1,  col="red")
 La RMSE de l'arbre de régression est :`r rmse_tree_log` contre `r rmse_tree` sans transfo log.
 
 
+```{r tree_importante2}
+bfit4pruned$variable.importance
+barplot(bfit4pruned$variable.importance)
+
+```
 
 ##8. Random Forest
 ```{r rf,fig.height=5, fig.width=5}
@@ -674,4 +680,12 @@ Le meilleur modèle est le random forest utilisé sur des données non log10 tra
 
 
 
+### Notes pour CDV
+library("RWeka")
+m5treee <- M5P(LeagueIndex ~ ., data = skillcraft_train)
+
+
+
+Ici il est dit que l'on peut garder des variables corrélées quand on fait des arbres.
+<https://medium.com/data-design/ensembles-of-tree-based-models-why-correlated-features-do-not-trip-them-and-why-na-matters-7658f4752e1b>
 

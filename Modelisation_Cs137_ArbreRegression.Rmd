@@ -1,0 +1,124 @@
+---
+title: "Modelisation Data Prelevement par Arbre de régression"
+author: "Claire Della Vedova"
+date: "14 novembre 2017"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+Il s'agit de modéliser les concentration en césium 137 en fonction de 4 variables prédictives :
+
+* Charge, 
+* débit, 
+* Flux_MES, 
+* Periode de Retour, 
+* OrigineCrue3
+
+
+en utilisant un arbre de régression.
+
+Cette modélisation se fait sur le jeu de données prélèvements.
+
+
+
+Les variables numériques ne sont ni loguées ni standradisées et les variables catégorielles sont en facteur.
+
+
+```{r  global_options}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE,
+  warning = FALSE, fig.width = 15, fig.height = 12)
+
+```
+
+
+```{r package}
+library('ggplot2')
+library('dplyr')
+library('tidyverse')
+library('caret')
+library('dummies')
+library('FNN')
+library('scales')
+library('rpart')
+library('rpart.plot')
+library('randomForest')
+library('knitr')
+library('AppliedPredictiveModeling')
+library('Rmisc')
+library('gbm')
+
+```
+
+
+
+##1. Data
+
+```{r data, results='hide'}
+
+load("OSR4.RData")
+
+# on travaille avec le jeu de données CsData2 qui ne contient plus l'unique donnée oceanique5 (variable OrigineCrue3)
+ 
+summary(Csdata2)
+dim(Csdata2)
+str(Csdata2)
+tail(Csdata2,15)
+
+```
+
+Les 10 dernières lignes ne comportent pas de données de débit et de charge ==> on les supprime pour la prédiction.
+
+
+```{r data2,results='hide'}
+
+# on enlève les 10 premières lignes
+Csdata3<- Csdata2 %>%
+  filter(Debit_max!="NA")
+
+tail(Csdata3,15)
+summary(Csdata3)
+```
+
+
+
+
+```{r Tree}
+
+mydata <-  Csdata3[, c(9,13,19,25,31)]
+
+tree1 <- rpart(Cs137~ .,data=mydata)
+prp(tree1, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray", main="tree1")
+
+# prunning : le but est de simplifier l'arbre pour éviter que celui-ci ne colle trop
+# aux données utilisées et qu'il soit ensuite pas trés bon dabs la prédiction de 
+# nouvelles données.
+my_cp <-tree$cptable[which.min(tree$cptable[,4]),1]
+tree1_pruned1 <- prune(tree1, cp= my_cp ) # + faible CV error (xerror)
+tree1_pruned2 <- prune(tree1, cp= 0.04012146 ) # arbre that comes withn 1 SD (xstd) of the minimum xerror
+
+
+
+### par fonction tree (livre ISLR)
+library(tree)
+tree2 <- tree(Cs137~ .,data=mydata)
+plot(tree2)
+text(tree2, pretty=0)
+cv.tree2=cv.tree(tree2)
+cv.tree2 # meilleur arbre = 7splits  
+plot(cv.tree2$size, cv.tree2$dev)## meilleur arbre = 7splits 
+
+## = > on garde 7 splits == l'arbre original
+
+
+prp(tree1, type=2, nn=TRUE, fallen.leaves=TRUE, faclen=4, 
+varlen=8, shadow.col="gray", main="tree1")
+
+tree1
+
+```
+
+
